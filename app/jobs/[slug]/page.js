@@ -1,8 +1,34 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getJobBySlug, getRelatedJobs, generateSlug } from '../../lib/jobs'
+import { getJobBySlug, getRelatedJobs, generateSlug, jobCards } from '../../lib/jobs'
 import Breadcrumb from '../../components/Breadcrumb'
 import SocialShare from '../../components/SocialShare'
+
+// Helper function to determine if post is Finance
+const isFinancePost = (job) => {
+  const title = job.title.toLowerCase()
+  const summary = job.summary.toLowerCase()
+  const badge = job.badge?.toLowerCase() || ''
+  return badge === 'finance tips' || title.includes('tax') || title.includes('sip') || 
+         title.includes('investment') || title.includes('finance') || 
+         title.includes('emergency fund') || title.includes('mutual fund') ||
+         title.includes('credit card') || title.includes('home loan') ||
+         title.includes('health insurance')
+}
+
+// Calculate reading time (average 200 words per minute)
+const calculateReadingTime = (text) => {
+  const words = text.split(/\s+/).length
+  const minutes = Math.ceil(words / 200)
+  return minutes
+}
+
+// Get related finance posts only
+const getRelatedFinancePosts = (currentJobId, limit = 3) => {
+  return jobCards
+    .filter((job) => job.id !== currentJobId && isFinancePost(job))
+    .slice(0, limit)
+}
 
 export async function generateMetadata({ params }) {
   const job = getJobBySlug(params.slug)
@@ -31,17 +57,209 @@ export default function JobDetailPage({ params }) {
     notFound()
   }
 
-  const relatedJobs = getRelatedJobs(job.id, 3)
+  const isFinance = isFinancePost(job)
+  const relatedJobs = isFinance ? getRelatedFinancePosts(job.id, 3) : getRelatedJobs(job.id, 3)
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://nextplan.com'
+  const currentUrl = `${baseUrl}/jobs/${params.slug}`
+  const readingTime = calculateReadingTime(job.summary + ' ' + (job.eligibility || '') + ' ' + (job.howToApply || ''))
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
-    { label: 'Jobs', href: '/' },
+    { label: isFinance ? 'Finance Tips' : 'Jobs', href: isFinance ? '/finance-tips' : '/jobs' },
     { label: job.title },
   ]
 
+  // Structured Data (JSON-LD) for SEO
+  const structuredData = isFinance ? {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: job.title,
+    description: job.summary,
+    author: {
+      '@type': 'Organization',
+      name: 'NextPlan',
+    },
+    datePublished: new Date().toISOString(),
+    dateModified: new Date().toISOString(),
+    publisher: {
+      '@type': 'Organization',
+      name: 'NextPlan',
+    },
+  } : {
+    '@context': 'https://schema.org',
+    '@type': 'JobPosting',
+    title: job.title,
+    description: job.summary,
+    identifier: {
+      '@type': 'PropertyValue',
+      name: 'NextPlan',
+      value: job.id.toString(),
+    },
+    datePosted: new Date().toISOString(),
+    validThrough: job.lastDate ? new Date(job.lastDate).toISOString() : undefined,
+    employmentType: 'FULL_TIME',
+    hiringOrganization: {
+      '@type': 'Organization',
+      name: job.title.split(' ')[0] + ' ' + (job.title.split(' ')[1] || ''),
+    },
+    jobLocation: {
+      '@type': 'Place',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: job.location || 'All India',
+        addressCountry: 'IN',
+      },
+    },
+    baseSalary: {
+      '@type': 'MonetaryAmount',
+      currency: 'INR',
+    },
+    qualifications: job.qualification,
+    numberOfOpenings: job.vacancies,
+  }
+
+  // Render Finance Template or Job Template based on category
+  if (isFinance) {
+    return (
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <Breadcrumb items={breadcrumbItems} />
+
+          {/* Finance Article Template */}
+          <article className="prose prose-slate prose-lg max-w-none">
+            {/* Featured Image Placeholder */}
+            <div className="w-full h-64 md:h-96 bg-gradient-to-br from-orange-100 to-orange-200 rounded-lg mb-8 flex items-center justify-center">
+              <div className="text-center">
+                <svg
+                  className="w-24 h-24 mx-auto text-orange-500 mb-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p className="text-slate-600 text-sm">Featured Image</p>
+              </div>
+            </div>
+
+            {/* Article Header */}
+            <header className="mb-8">
+              <div className="flex items-center gap-3 mb-4">
+                {job.badge && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                    {job.badge}
+                  </span>
+                )}
+                <span className="text-slate-500 text-sm">
+                  {readingTime} min read
+                </span>
+                <span className="text-slate-400">•</span>
+                <span className="text-slate-500 text-sm">
+                  {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-6 leading-tight">
+                {job.title}
+              </h1>
+              <p className="text-xl text-slate-600 leading-relaxed mb-6">
+                {job.summary}
+              </p>
+              <SocialShare title={job.title} url={currentUrl} />
+            </header>
+
+            {/* Article Content */}
+            <div className="prose prose-slate prose-lg max-w-none">
+              {job.eligibility && (
+                <section className="mb-8">
+                  <h2 className="text-3xl font-bold text-slate-900 mb-4">Overview</h2>
+                  <div className="text-slate-700 leading-relaxed">
+                    <p>{job.eligibility}</p>
+                  </div>
+                </section>
+              )}
+
+              {job.howToApply && (
+                <section className="mb-8">
+                  <h2 className="text-3xl font-bold text-slate-900 mb-4">Key Points</h2>
+                  <div className="text-slate-700 leading-relaxed whitespace-pre-line">
+                    {job.howToApply}
+                  </div>
+                </section>
+              )}
+
+              {/* Additional content sections */}
+              {job.applicationFee && job.applicationFee !== 'N/A' && (
+                <section className="mb-8">
+                  <h2 className="text-3xl font-bold text-slate-900 mb-4">Important Information</h2>
+                  <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
+                    <p className="text-slate-700 leading-relaxed">{job.applicationFee}</p>
+                  </div>
+                </section>
+              )}
+            </div>
+
+            {/* Author Profile */}
+            <div className="mt-12 pt-8 border-t border-slate-200">
+              <div className="flex items-start space-x-4">
+                <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                  NP
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-1">NextPlan Editorial Team</h3>
+                  <p className="text-slate-600 mb-2">
+                    Expert financial advisors and government job specialists dedicated to helping you achieve your career and financial goals.
+                  </p>
+                  <div className="flex space-x-4 text-sm text-slate-500">
+                    <span>Finance Expert</span>
+                    <span>•</span>
+                    <span>Investment Advisor</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Related Finance Posts */}
+            {relatedJobs.length > 0 && (
+              <div className="mt-12 pt-8 border-t border-slate-200">
+                <h3 className="text-2xl font-bold text-slate-900 mb-6">Related Finance Tips</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {relatedJobs.map((relatedPost) => (
+                    <Link
+                      key={relatedPost.id}
+                      href={`/jobs/${generateSlug(relatedPost.title)}`}
+                      className="block group"
+                    >
+                      <div className="bg-white rounded-lg border border-slate-200 p-4 hover:border-orange-500 hover:shadow-md transition-all duration-200 h-full">
+                        <h4 className="font-semibold text-slate-900 mb-2 line-clamp-2 group-hover:text-orange-600 transition-colors">
+                          {relatedPost.title}
+                        </h4>
+                        <p className="text-sm text-slate-600 line-clamp-3">
+                          {relatedPost.summary}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </article>
+        </div>
+      </>
+    )
+  }
+
+  // Government Job Template (Existing Layout)
   return (
     <>
-      {/* Structured Data for SEO */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
@@ -49,34 +267,34 @@ export default function JobDetailPage({ params }) {
       <div className="container mx-auto px-4 py-8">
         <Breadcrumb items={breadcrumbItems} />
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* Left Side - Main Content */}
-        <main className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              {job.badge && (
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    job.badge === 'New'
-                      ? 'bg-green-100 text-green-700'
-                      : job.badge === 'Last Date'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  {job.badge}
-                </span>
-              )}
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Left Side - Main Content */}
+          <main className="flex-1 min-w-0">
+            {/* Header */}
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                {job.badge && (
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                      job.badge === 'New'
+                        ? 'bg-green-100 text-green-700'
+                        : job.badge === 'Last Date'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {job.badge}
+                  </span>
+                )}
+              </div>
+              <h1 className="text-4xl font-bold text-slate-900 mb-4">
+                {job.title}
+              </h1>
+              <p className="text-lg text-slate-600 leading-relaxed mb-4">
+                {job.summary}
+              </p>
+              <SocialShare title={job.title} url={currentUrl} />
             </div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-4">
-              {job.title}
-            </h1>
-            <p className="text-lg text-slate-600 leading-relaxed mb-4">
-              {job.summary}
-            </p>
-            <SocialShare title={job.title} url={currentUrl} />
-          </div>
 
           {/* Summary Table */}
           <div className="bg-slate-50 rounded-lg border border-slate-200 p-6 mb-8">
