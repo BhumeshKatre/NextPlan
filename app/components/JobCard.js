@@ -16,7 +16,7 @@ import { generateSlug } from '../lib/jobs'
  * @param {string} [job.vacancies] - Optional number of vacancies
  * @param {string} [job.qualification] - Optional qualification requirement
  * @param {string} [job.location] - Optional location
- * @param {string} [job.buttonText] - Optional custom button text (default: 'Apply Now')
+ * @param {string} [job.buttonText] - Optional custom button text (default: 'View More')
  * @param {Function} [job.onClick] - Optional click handler for the card
  * @param {Function} [job.onButtonClick] - Optional click handler for the button
  * @param {string} [job.href] - Optional link URL
@@ -40,7 +40,7 @@ export default function JobCard({
     vacancies,
     qualification,
     location,
-    buttonText = 'Apply Now',
+    buttonText = 'View More',
     href,
     tags = [],
     image,
